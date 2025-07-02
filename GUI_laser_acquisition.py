@@ -32,10 +32,19 @@ from datetime import datetime
 from save_img import saveImg
 
 import inspect
-# Import the .NET Common Language Runtime (CLR) to allow interaction with .NET
-import clr
-
+try:
+    # Import the .NET Common Language Runtime (CLR) to allow interaction with .NET
+    import clr
+except ImportError:
+    print("no .NET Common Language Runtime (CLR) found. Can't run picomotors...")
+    
 ############################################################# general functions to be used below ##############################################################
+
+def getResolution(monitor):
+    crd = monitor.find('x')
+    width = int(monitor[:crd])
+    height = int(monitor[crd+1:])
+    return width, height
 
 def supergauss_2D(data_tuple, ux, uy, sigx, sigy, P, amp, off):
     (x, y) = data_tuple
@@ -69,8 +78,15 @@ class camAcq():
             self.tlFactory = pylon.TlFactory.GetInstance()
             # Get all attached devices and exit application if no device is found.
             self.devices = self.tlFactory.EnumerateDevices()
-            if len(self.devices) == 0:
-                raise pylon.RuntimeException("No camera present.")
+            
+            counter = 0
+            while len(self.devices) == 0:
+                counter +=1
+                time.sleep(1.)
+                if counter >100:
+                    1/0
+                self.devices = self.tlFactory.EnumerateDevices()
+               
             self.options = np.array([d.GetUserDefinedName() for d in self.devices])
             self.arr = np.array([[0,0]])
         else:
@@ -78,7 +94,7 @@ class camAcq():
             self.arr = np.zeros(synth_shape)
             self.shape = synth_shape
         self.bkgnd = np.zeros_like(self.arr)
-    def open_camera(self, cam_name, exposure_time, trigger_mode):
+    def open_camera(self, cam_name, exposure_time, trigger_mode, GigE, packet_size, packet_delay):
         if not self.synthetic:
             self.cam_coord = np.where(self.options==cam_name)[0][0]
             try:
@@ -90,15 +106,33 @@ class camAcq():
                     self.camera.ExposureTimeRaw.Value = exposure_time
                 self.camera.TriggerMode.SetValue(trigger_mode.capitalize())
                 self.camera.PixelFormat.SetValue("Mono12")
-                self.camera.MaxNumBuffer.SetValue(10)
-                self.camera.MaxNumQueuedBuffer.SetValue(10)
+                # self.camera.MaxNumBuffer.SetValue(10)
+                # self.camera.MaxNumQueuedBuffer.SetValue(10)
                 try:
                     self.camera.StreamGrabber.MaxTransferSize.Value = 4 * 1024 * 1024
                 except:
                     pass
                 self.width = self.camera.Width.GetValue()
                 self.height = self.camera.Height.GetValue()
-                self.camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
+                if GigE:
+                    # camera.GevStreamChannelSelector.SetValue(GevStreamChannelSelector_StreamChannel0);
+                    self.camera.GevSCPSPacketSize.SetValue(packet_size);
+                    self.camera.GevSCPD.SetValue(packet_delay);
+                    print('camera bandwidth (MB/s):')
+                    print(self.camera.GevSCDCT.GetValue()/1e6)
+                counter = 0
+                bad = True
+                while bad:
+                    counter += 1
+                    if counter >100:
+                        print("welp camera can't open lol")
+                        bad = False
+                    try:
+                        self.camera.StartGrabbing(pylon.GrabStrategy_LatestImageOnly)
+                        bad = False
+                    except:
+                        time.sleep(2)
+                        continue
                 # self.camera.StartGrabbing(pylon.GrabStrategy_OneByOne)
             except genicam.GenericException as e:
             # Error handling
@@ -133,7 +167,7 @@ class dataHistory():
         if len(self.lineLong)>resetLong:
             self.lineLong = self.lineLong[1:]
         self.arr = np.append(self.arr, data)
-        self.std = np.append(self.std, np.std(self.arr[-shot_avg:])/np.sqrt(shot_avg))
+        self.std = np.append(self.std, np.std(self.arr[-shot_avg:]))
         self.line = np.append(self.line, np.mean(self.arr[-shot_avg:]))
         self.lineLong = np.append(self.lineLong, data)
 
@@ -148,7 +182,7 @@ class coordHistory():
             self.std = self.std[1:]
             self.line = self.line[1:]
         self.arr = np.append(self.arr, [data], axis = 0)
-        self.std = np.append(self.std, [np.std(self.arr[-shot_avg:], axis = 0)/np.sqrt(shot_avg)], axis=0)
+        self.std = np.append(self.std, [np.std(self.arr[-shot_avg:], axis = 0)], axis=0)
         self.line = np.append(self.line, [np.mean(self.arr[-shot_avg:], axis = 0)], axis=0)
         
 class motorMover():
@@ -207,29 +241,11 @@ class fitParams():
     def setParams(self, data):
         self.params = np.array(data)
 
-############################################################# basic settings ##########################################################################
-
-coords = [0,0]
-n_cams = [3,2]
-
-screen_width = 1920
-screen_height = 1020
-window = str(sys.argv[1])
-print(window)
-winVal = int(window[-1])-1
-xorigin = (screen_width//n_cams[0])*winVal if winVal <n_cams[0] else (screen_width//n_cams[0])*(winVal-n_cams[0])
-yorigin = 0 if winVal <n_cams[0] else screen_height//2+30
-
-origin = [xorigin, yorigin]
-
-s_sizex = screen_width//n_cams[0]
-s_sizey = screen_height//n_cams[1]
-screen = str(s_sizex)+"x"+str(s_sizey)+"+"+str(origin[0])+"+"+str(origin[1])
-
-root = tkinter.Tk()
-
 ################################################################ read in camera settings; start grabbing #####################################################
 
+root = tkinter.Tk()
+window = str(sys.argv[1])
+print(window)
 iniFname = str(sys.argv[2])
 print('reading settings from: %s' %iniFname)
 config = configparser.ConfigParser()
@@ -240,6 +256,11 @@ exposure_time = tkinter.IntVar()
 exposure_time.set(int(config[window.upper() + ' SETTINGS']['exposure time']))
 trigger_mode = tkinter.StringVar()
 trigger_mode.set(config[window.upper() + ' SETTINGS']['trigger mode'])
+GigE = tkinter.BooleanVar(value = config[window.upper() + ' SETTINGS']['GigE']=='True')
+packetSize = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['packet size']))
+packetDelay = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['packet delay']))
+frameDelay = tkinter.DoubleVar(value = float(config[window.upper() + ' SETTINGS']['frame delay']))
+GUIPause = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['GUIPause']))
                                 
 EcalVal = tkinter.DoubleVar(value = float(config[window.upper() + ' SETTINGS']['energy cal']))
 energyLimit = tkinter.DoubleVar(value = float(config[window.upper() + ' SETTINGS']['energy warning value']))
@@ -271,21 +292,92 @@ motorYnum = StringVar(value = config[window.upper() + ' SETTINGS']['motor y numb
 motorXmult = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['motor x multiplier']))
 motorYmult = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['motor y multiplier']))
 initializeOn = tkinter.BooleanVar(value = config[window.upper() + ' SETTINGS']['initialize motors at start']=='True')
+usingMotors = tkinter.BooleanVar(value = config[window.upper() + ' SETTINGS']['using motors']=='True')
 
 umperpix = tkinter.DoubleVar(value = float(config[window.upper() + ' SETTINGS']['umperpix']))
 fittingini = tkinter.BooleanVar(value = config[window.upper() + ' SETTINGS']['gauss fitting']=='True')
 fitting = tkinter.BooleanVar(value = False)
 singleShot = tkinter.BooleanVar(value = config[window.upper() + ' SETTINGS']['single shot']=='True')
 
-timeout = tkinter.IntVar(value = 1000)
-if trigger_mode.get() == 'on':
-    timeout.set(200)
-    
+wPosition = config[window.upper() + ' SETTINGS']['position']
+screen_size_horiz = int(config[window.upper() + ' SETTINGS']['horizontal screen size'])
+screen_size_vert = int(config[window.upper() + ' SETTINGS']['vertical screen size'])
+
+mon = config[window.upper() + ' SETTINGS']['monitor']
+if mon[-1] == '1':
+    monitor = config['MONITOR RESOLUTION'][mon]
+else:
+    monitor = config['MONITOR RESOLUTION'][mon[:-1]]
+
+timeout = tkinter.IntVar(value = int(config[window.upper() + ' SETTINGS']['timeout']))
+timeoutOrig = tkinter.IntVar(value = timeout.get())
 #cam = camAcq(synthetic_camera = True)
+
 cam = camAcq()
-cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get())
+cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get(), GigE.get(), packetSize.get(), packetDelay.get())
 
 ############################################################# Tkinter gui elements setup ###################################################################### 
+
+coords = [0,0]
+
+screen_width, screen_height = getResolution(monitor)
+screen_height -=60
+# screen_width = 1920
+# screen_height = 1020
+# sceen_size_horiz = 3
+# screen_size_vert = 2
+if mon[-1] == '1':
+    position = {'top left':[0, 0],
+            'top center':[screen_width//screen_size_horiz, 0],
+            'top right':[(screen_width-screen_width//screen_size_horiz), 0],
+            'bottom left':[0, screen_height//screen_size_vert+30],
+            'bottom center':[screen_width//screen_size_horiz, screen_height//screen_size_vert+30], 
+            'bottom right':[(screen_width - screen_width//screen_size_horiz), screen_height//screen_size_vert+30]
+           }
+elif mon[-1] == 'L':
+        position = {'top left':[-screen_width, 0],
+            'top center':[-screen_width+screen_width//screen_size_horiz, 0],
+            'top right':[-screen_width//screen_size_horiz-10, 0],
+            'bottom left':[-screen_width, screen_height//screen_size_vert+30],
+            'bottom center':[-screen_width+screen_width//screen_size_horiz, screen_height//screen_size_vert+30], 
+            'bottom right':[-screen_width//screen_size_horiz-10, screen_height//screen_size_vert+30]
+           }
+elif mon[-1] == 'R':
+        position = {'top left':[screen_width, 0],
+            'top center':[screen_width+screen_width//screen_size_horiz, 0],
+            'top right':[screen_width+screen_width//screen_size_horiz-10, 0],
+            'bottom left':[screen_width, screen_height//screen_size_vert+30],
+            'bottom center':[screen_width+screen_width//screen_size_horiz, screen_height//screen_size_vert+30], 
+            'bottom right':[screen_width+screen_width//screen_size_horiz-10, screen_height//screen_size_vert+30]
+           }
+elif mon[-1] == 'T':
+    position = {'top left':[0, -screen_height-60],
+            'top center':[screen_width//screen_size_horiz, -screen_height-60],
+            'top right':[(screen_width-screen_width//screen_size_horiz), -screen_height-60],
+            'bottom left':[0, screen_height//screen_size_vert+30-screen_height-60],
+            'bottom center':[screen_width//screen_size_horiz, screen_height//screen_size_vert+30-screen_height-60], 
+            'bottom right':[(screen_width - screen_width//screen_size_horiz), screen_height//screen_size_vert+30-screen_height-60]
+           }   
+elif mon[-1] == 'B':
+    position = {'top left':[0, screen_height+60],
+            'top center':[screen_width//screen_size_horiz, screen_height+60],
+            'top right':[(screen_width-screen_width//screen_size_horiz), screen_height+60],
+            'bottom left':[0, screen_height//screen_size_vert+30+screen_height+60],
+            'bottom center':[screen_width//screen_size_horiz, screen_height//screen_size_vert+30+screen_height+60], 
+            'bottom right':[(screen_width - screen_width//screen_size_horiz), screen_height//screen_size_vert+30+screen_height+60]
+           }
+
+# winVal = int(window[-1])-1
+# n_cams =[3,2]
+# xorigin = (screen_width//n_cams[0])*winVal if winVal <n_cams[0] else (screen_width//n_cams[0])*(winVal-n_cams[0])
+# yorigin = 0 if winVal <n_cams[0] else screen_height//2+30
+xorigin, yorigin = position[wPosition]
+
+origin = [xorigin, yorigin]
+
+s_sizex = screen_width//screen_size_horiz
+s_sizey = screen_height//screen_size_vert
+screen = str(s_sizex)+"x"+str(s_sizey)+"+"+str(origin[0])+"+"+str(origin[1])
 
 root.wm_title(window)
 root.geometry(screen)
@@ -323,26 +415,58 @@ fluencelabelDir = Label(root, textvariable=fluencelabelText, font = ("arial",10)
 fluenceText = StringVar(value = "")
 fluenceDir = Label(root, textvariable=fluenceText, font = ("arial",20))
 
-gauss_fit_button = ttk.Checkbutton(root, text='Gauss fit', variable=fitting, onvalue=True, offvalue=False)
+def place_gui_elems(yvals_max):
+    offset = 10
+    button_quit.place(x=s_sizex - 50, y=yvals_max + 50 - offset)
+    # labelDir.place(x=500, y=s_sizey-75)
+    camNameDir.place(x=150, y=yvals_max + 50 - offset)
+    energylabelDir.place(x=150, y=yvals_max - offset)
+    energyDir.place(x=150, y=yvals_max+20 - offset)
+    stdlabelDir.place(x=240, y=yvals_max - offset)
+    stdDir.place(x=240, y=yvals_max+20 - offset)
+    fluencelabelDir.place(x=340, y=yvals_max - offset)
+    fluenceDir.place(x=340, y=yvals_max+20 - offset)
+    fwhmxlabelDir.place(x=450, y=yvals_max - offset)
+    fwhmxDir.place(x=450, y=yvals_max+20 - offset)
+    fwhmylabelDir.place(x=540, y=yvals_max - offset)
+    fwhmyDir.place(x=540, y=yvals_max+20 - offset)
+    button_energy.place(x=0, y=yvals_max - offset)
+    button_ROI.place(x=0, y=yvals_max + 25 - offset)
+    button_save.place(x=75, y=yvals_max - offset)
+    button_cam.place(x=75, y = yvals_max + 25 - offset)
+    button_plot.place(x=0, y=yvals_max + 50 - offset)
+    if usingMotors.get():
+        buttom_motor.place(x=75, y=yvals_max + 50 - offset)
+    camNameDir.lift()
+    energylabelDir.lift()
+    energyDir.lift()
+    stdlabelDir.lift()
+    stdDir.lift()
+    fluencelabelDir.lift()
+    fluenceDir.lift()
+    fwhmxlabelDir.lift()
+    fwhmxDir.lift()
+    fwhmylabelDir.lift()
+    fwhmyDir.lift()
 
 ################################################################ create plot structure ########################################################################
 
 cameraChange = tkinter.BooleanVar(value = True)
 cameraChange2 = tkinter.BooleanVar(value = False)
-
+screenScale = 1-80/s_sizey
 scale = tkinter.DoubleVar(value = s_sizex/cam.width)
-if scale.get()*cam.height > 0.8*s_sizey:
-    scale.set(0.8*s_sizey/cam.height)
+if scale.get()*cam.height > screenScale*s_sizey:
+    scale.set(screenScale*s_sizey/cam.height)
 orig_scale = scale.get()
 xvals = np.arange(int(scale.get()*cam.width))
 yvals = np.arange(int(scale.get()*cam.height))
 xvals_max = s_sizex
-yvals_max = int(0.8*s_sizey)
+yvals_max = int(screenScale*s_sizey)
 px = 1/plt.rcParams['figure.dpi']
 
 x_extent = s_sizex*px
-y_extent = int(0.8*s_sizey*px)
-rect = patches.Rectangle((-1, -1), xvals_max+1, yvals_max+1, edgecolor='white',facecolor='white')
+y_extent = screenScale*s_sizey*px
+rect = patches.Rectangle((-2, -2), xvals_max+2, yvals_max+2, edgecolor='white',facecolor='white')
 circ = patches.Ellipse((int(scale.get()*int(cursorXfixed.get())),int(scale.get()*int(cursorYfixed.get()))), 0,0, fill=False, edgecolor='white')
 fig = plt.figure(figsize=(x_extent, y_extent))
 
@@ -352,7 +476,7 @@ vertical_line = plt.axvline(color='white', lw=0.8, ls='-')
 horizontal_line_fixed = plt.axhline(color='white', lw=0.8, ls='-')
 vertical_line_fixed = plt.axvline(color='white', lw=0.8, ls='-')
 
-x_slice_raw, = plt.plot([0], [0])
+x_slice_raw, = plt.plot([0],[0])
 y_slice_raw, = plt.plot([0],[0])
 x_slice, = plt.plot([0],[0])
 y_slice, = plt.plot([0],[0])
@@ -377,6 +501,8 @@ ROIBottomLine = plt.axhline(color='white', lw=0.8, ls='-')
 ROITopLine = plt.axhline(color='white', lw=0.8, ls='-')
 
 im = plt.imshow(np.zeros((yvals_max, xvals_max)), aspect = 'auto')
+plt.margins(x=0)
+plt.margins(y=0)
 
 plt.axis('off')
 fig.tight_layout()
@@ -449,6 +575,11 @@ frameCounter = tkinter.IntVar(value = 0)
 motorFrame = tkinter.BooleanVar(value = False)
 aboveThreshold = tkinter.BooleanVar(value = False)
 
+skipFrame = tkinter.BooleanVar(value = False)
+openBox = tkinter.BooleanVar(value = False)
+boxFrame = tkinter.IntVar(value = 0)
+startCount = tkinter.BooleanVar(value = False)
+
 def stop():
     fig.canvas.mpl_disconnect(cid)
     try:
@@ -505,6 +636,7 @@ def Ecalfcn():
         config.write(configfile)
         
 def popup_energy():
+    openBox.set(True)
     win = tkinter.Toplevel()
     win.wm_title("Energy settings")
     win.geometry("300x250"+"+"+str(origin[0])+"+"+str(origin[1]))
@@ -561,7 +693,7 @@ def popup_energy():
     b = ttk.Button(win, text="close window", command=win.destroy)
     b.place(x=0, y=220)
     
-button_energy = ttk.Button(root, text="E settings", command=popup_energy)
+button_energy = ttk.Button(root, text="Energy/fl", command=popup_energy)
 
 ################################################################ ROI popup box ################################################################################
 
@@ -604,9 +736,10 @@ def saveROIfcn():
         config.write(configfile)
     
 def popup_ROI():
+    openBox.set(True)
     winROI = tkinter.Toplevel()
     winROI.wm_title("ROI settings")
-    winROI.geometry("300x150"+"+"+str(int(s_sizex/2+origin[0]))+"+"+str(int(0.8*s_sizey+origin[1])))
+    winROI.geometry("300x150"+"+"+str(int(origin[0]))+"+"+str(int(origin[1]+0.8*yvals_max)))
     
     showROIBboxButton = ttk.Checkbutton(winROI, text='show ROIBbox', variable=ROIBboxButton, onvalue=1, offvalue=0, command=ROIBboxfcn)
     showROIBboxButton.place(x=0, y=0)
@@ -634,7 +767,7 @@ def popup_ROI():
     bROI = ttk.Button(winROI, text="close window", command=winROI.destroy)
     bROI.place(x=0, y=70)
     
-button_ROI = ttk.Button(root, text="ROI settings", command=popup_ROI)
+button_ROI = ttk.Button(root, text="ROI", command=popup_ROI)
 
 ################################################################ Save popup box ###############################################################################
 
@@ -642,9 +775,10 @@ def setSaveTimefcn():
     lastSave.set(0)
 
 def popup_save():
+    openBox.set(True)
     winSave = tkinter.Toplevel()
     winSave.wm_title("Save settings")
-    winSave.geometry("350x180"+"+"+str(int(s_sizex/2+origin[0]))+"+"+str(int(s_sizey)))
+    winSave.geometry("350x180"+"+"+str(int(s_sizex-350+origin[0]))+"+"+str(origin[1]))
     
     saveImagesButton = ttk.Checkbutton(winSave, text='save images', variable=saveImages, onvalue=True, offvalue=False, command = setSaveTimefcn)
     saveFolderlabelDir = Label(winSave, textvariable=StringVar(value='save folder'))
@@ -671,7 +805,7 @@ def popup_save():
     bSave = ttk.Button(winSave, text="close window", command=winSave.destroy)
     bSave.place(x=0, y=150)
     
-button_save = ttk.Button(root, text="Save settings", command=popup_save)
+button_save = ttk.Button(root, text="Saving", command=popup_save)
 
 ################################################################ camera popup box ##############################################################################
 
@@ -685,20 +819,24 @@ def camChangefcn():
         config['CAMERA NAMES'][window] = cam_name.get()
         config[window.upper() + ' SETTINGS']['exposure time'] = str(exposure_time.get())
         config[window.upper() + ' SETTINGS']['trigger mode'] = trigger_mode.get()
+        config[window.upper() + ' SETTINGS']['timeout'] = str(timeout.get())
         with open(iniFname, 'w') as configfile:
             config.write(configfile)
         cam.camera.Close()
-        if trigger_mode.get() == 'on':
-            timeout.set(200)
-        else:
-            timeout.set(1000)
-        cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get())
+        cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get(), GigE.get(), packetSize.get(), packetDelay.get())
         cameraChange.set(True)
+    elif timeout.get() != timeoutOrig.get():
+        timeoutOrig.set(timeout.get())
+        config.read(iniFname)
+        config[window.upper() + ' SETTINGS']['timeout'] = str(timeout.get())
+        with open(iniFname, 'w') as configfile:
+            config.write(configfile)
 
 def popup_camera():
+    openBox.set(True)
     winCam = tkinter.Toplevel()
     winCam.wm_title("Camera settings")
-    winCam.geometry("250x170"+"+"+str(int(s_sizex/2+origin[0]))+"+"+str(int(1.5*s_sizey)))
+    winCam.geometry("250x180"+"+"+str(origin[0])+"+"+str(int(origin[1]+170)))
     
     exposure_setting = ttk.Entry(winCam, textvariable=exposure_num, width=15)
 
@@ -715,6 +853,9 @@ def popup_camera():
     triggerDir=Label(winCam, textvariable=triggerText)
     triggerDrop = OptionMenu(winCam, triggerClicked, *['on', 'off'])
     
+    timeoutLabel = Label(winCam, textvariable = StringVar(value = 'timeout (ms):'))
+    timeoutEntry = ttk.Entry(winCam, textvariable = timeout, width = 10)
+    
     saveCamSettings = ttk.Button(winCam, text="change cam settings", command=camChangefcn)
     
     cameraDir.place(x=0, y=0)
@@ -723,12 +864,14 @@ def popup_camera():
     exposure_setting.place(x=0, y=70)
     triggerDir.place(x=120, y=50)
     triggerDrop.place(x=120, y=70) 
-    saveCamSettings.place(x=0, y=95)
+    timeoutLabel.place(x=0, y=100)
+    timeoutEntry.place(x=80, y=100)
+    saveCamSettings.place(x=0, y=125)
     
     bCam = ttk.Button(winCam, text="close window", command=winCam.destroy)
-    bCam.place(x=0, y=140)
+    bCam.place(x=0, y=150)
     
-button_cam = ttk.Button(root, text="Cam settings", command=popup_camera)
+button_cam = ttk.Button(root, text="Cameras", command=popup_camera)
 
 ################################################################ plot settings popup box #######################################################################
 
@@ -774,9 +917,10 @@ def autoCursorfcn():
         cursorY.set(coords[1])
             
 def popup_plot():
+    openBox.set(True)
     winPlot = tkinter.Toplevel()
     winPlot.wm_title("Plot settings")
-    winPlot.geometry("250x250"+"+"+str(int(s_sizex/2+origin[0]))+"+"+str(int(1.5*s_sizey)))
+    winPlot.geometry("250x250"+"+"+str(int(origin[0]))+"+"+str(origin[1]+250))
     
     colorText = StringVar(value = "color scale")
     colorDir = Label(winPlot, textvariable = colorText)
@@ -794,6 +938,7 @@ def popup_plot():
     cursorYlabel = Label(winPlot, textvariable=cursorY, width = 5)
     cursorXstdlabel = Label(winPlot, textvariable=cursorXstd, width=5)
     cursorYstdlabel = Label(winPlot, textvariable=cursorYstd, width=5)
+    gauss_fit_button = ttk.Checkbutton(winPlot, text='Gauss fit', variable=fitting, onvalue=True, offvalue=False)
     
     cursorFixedText = StringVar(value = "fixed cursor coords and radius (x, y, rad)")
     cursorFixedDir = Label(winPlot, textvariable = cursorFixedText)
@@ -817,6 +962,7 @@ def popup_plot():
     cursorYstdlabel.place(x=100, y=110)
     cursorAvgDir.place(x=150, y=110)
     cursorAvgentry.place(x=220, y=110)
+    gauss_fit_button.place(x=150, y=180)
     
     cursorFixedDir.place(x=0, y=135)
     cursorXentryFixed.place(x=0, y=155)
@@ -832,7 +978,7 @@ def popup_plot():
     bPlot = ttk.Button(winPlot, text="close window", command=winPlot.destroy)
     bPlot.place(x=0, y=210)
     
-button_plot = ttk.Button(root, text="Plot settings", command=popup_plot)
+button_plot = ttk.Button(root, text="Plot adj", command=popup_plot)
 
 ################################################################  motor control popup box ######################################################################
 
@@ -874,10 +1020,11 @@ def jogMinusYfcn():
     if motorsInitialized.get():
         pico.move(deviceName.get(), motorYnum.get(), -1*motorYmult.get()*motorStep.get(), motorLim.get())
 
-def popup_motor():
+def popup_motor():    
+    openBox.set(True)
     winMotor = tkinter.Toplevel()
     winMotor.wm_title("Motor settings")
-    winMotor.geometry("250x300"+"+"+str(int(s_sizex/2+origin[0]))+"+"+str(int(1.5*s_sizey)))
+    winMotor.geometry("250x300"+"+"+str(origin[0])+"+"+str(origin[1]+300))
     
     initializeOnButton = ttk.Button(winMotor, text='init motors', command = initializeOnfcn, width = 10)
     
@@ -955,14 +1102,19 @@ def popup_motor():
     bMotor = ttk.Button(winMotor, text="close window", command=winMotor.destroy)
     bMotor.place(x=0, y=250)
     
-buttom_motor = ttk.Button(root, text="Motor settings", command=popup_motor)
+buttom_motor = ttk.Button(root, text="Motors", command=popup_motor)
 
 ################################################################ funcAnimation functions #######################################################################
 
 def grabCamera():
+    skipFrame.set(False)
+    if timeout.get()<200:
+        tout = 200
+    else:
+        tout = timeout.get()
     try:
         if not cam.synthetic:
-            grabResult = cam.camera.RetrieveResult(timeout.get(), pylon.TimeoutHandling_ThrowException) 
+            grabResult = cam.camera.RetrieveResult(tout, pylon.TimeoutHandling_ThrowException) 
             arr = grabResult.GetArray()
             img = np.array(arr, dtype = 'float64')
             cam.arr = np.copy(img)
@@ -971,16 +1123,13 @@ def grabCamera():
     except:
         if not singleShot.get():
             cam.camera.Close()
-            cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get())
-            grabResult = cam.camera.RetrieveResult(timeout.get(), pylon.TimeoutHandling_ThrowException)        
+            cam.open_camera(cam_name.get(), exposure_time.get(), trigger_mode.get(), GigE.get(), packetSize.get(), packetDelay.get())
+            grabResult = cam.camera.RetrieveResult(tout, pylon.TimeoutHandling_ThrowException)        
             arr = grabResult.GetArray()
             img = np.array(arr, dtype = 'float64')
             cam.arr = img
         else:
-            if cam.arr.shape[0]>1:
-                img = np.copy(cam.arr)
-            else:
-                img = np.zeros((int(scale.get()*cam.height), int(scale.get()*cam.width)))
+            skipFrame.set(True)
     if subtBkgnd.get():
         img -= cam.bkgnd
     if ROIEnable.get():
@@ -1012,9 +1161,9 @@ def grabCamera():
         fitting.set(True)
         fittingini.set(False)
     try:
-        flarr = np.copy(img)*EcalVal.get()/(umperpix.get()**2*(1e-4)**2)*np.cos(np.deg2rad(flAng.get()))
+        flarr = img*EcalVal.get()/(umperpix.get()**2*(1e-4)**2)*np.cos(np.deg2rad(flAng.get()))
     except:
-        flarr = np.copy(img)*EcalVal.get()/(umperpix.get()**2*(1e-4)**2)
+        flarr = img*EcalVal.get()/(umperpix.get()**2*(1e-4)**2)
     flPeakData.addData(np.max(flarr), shot_avg.get(), reset.get(), resetLong.get())
     flAvgData.addData(np.mean(flarr), shot_avg.get(), reset.get(), resetLong.get())
     if showFlMax.get():
@@ -1025,10 +1174,10 @@ def grabCamera():
             fluenceText.set("%.1e"%(flPeakData.line[-1]))
     else:
         fluencelabelText.set("Avg fl (mJ/cm^2)")
-        if flPeakData.line[-1] < 10000:
-            fluenceText.set("%.1f"%(flPeakData.line[-1]))
+        if flAvgData.line[-1] < 10000:
+            fluenceText.set("%.1f"%(flAvgData.line[-1]))
         else:
-            fluenceText.set("%.1e"%(flPeakData.line[-1]))
+            fluenceText.set("%.1e"%(flAvgData.line[-1]))
     if stddev < 0.1:
         stdText.set("%.1e"%(stddev))
     else:
@@ -1050,6 +1199,9 @@ def peak_and_fit(img):
     else:
         if crdData.arr.any():
             mcrd = np.array([[crdData.arr[-1][1]], [crdData.arr[-1][0]]])
+            #extra logic to handle ROI change:
+            if mcrd[1][0] > s[1] or mcrd[0][0] > s[0]:
+                mcrd = mcrdmax
         else:
             mcrd = mcrdmax
     
@@ -1063,7 +1215,7 @@ def peak_and_fit(img):
         p0x = [s[1]//2, 300, 3, np.max(slicex), np.min(slicex)]
         p0y = [s[0]//2, 300, 3, np.max(slicey), np.min(slicey)]
     
-    if np.max(slicex)>0:
+    if np.max(slicex)>0 and np.max(slicey)>0:
         xheight = (0.2*yvals_max)/np.max(slicex)
         yheight = (0.2*xvals_max)/np.max(slicey)
     else:
@@ -1078,15 +1230,15 @@ def peak_and_fit(img):
         try:
             poptx, pcovx = curve_fit(supergauss_1D, x1, slicex, p0 = p0x, bounds = [(0, 0, 0, 0, -np.inf), (s[1], np.inf, np.inf, np.inf, np.inf)])
             popty, pcovy = curve_fit(supergauss_1D, y1, slicey, p0 = p0y,  bounds = [(0, 0, 0, 0, -np.inf), (s[0], np.inf, np.inf, np.inf, np.inf)])
-            if poptx[1] < 3*s[1]:
-                if popty[1] < 3*s[0]:
+            if poptx[1] < 1.5*s[1]:
+                if popty[1] < 1.5*s[0]:
                     fitx.setParams(poptx)
                     fity.setParams(popty)
                 else:
                     fitx.setParams([])
                     fity.setParams([])
-            fwhmxText.set("%.2f"%(poptx[1]*umperpix.get()/1000))
-            fwhmyText.set("%.2f"%(popty[1]*umperpix.get()/1000))
+            fwhmxText.set("%.2f"%(poptx[1]*2.*np.sqrt(2)*np.log(2)**(1/(2*poptx[2]))*umperpix.get()/1000))
+            fwhmyText.set("%.2f"%(popty[1]*2.*np.sqrt(2)*np.log(2)**(1/(2*popty[2]))*umperpix.get()/1000))
             fwhmxlabelText.set("FWHMx (mm)")
             fwhmylabelText.set("FWHMy (mm)")
             x_slice.set_data(np.linspace(0, xvals_max, num=len(xvals)),
@@ -1256,10 +1408,26 @@ def stabilizeBeam():
             for i, mtr in enumerate([motorXnum.get(), motorYnum.get()]):
                 if i==0:
                     if abs(xdiff) > motorError.get():
-                        pico.move(deviceName.get(), motorXnum.get(), xsign*motorXmult.get()*motorStep.get(), motorLim.get())
+                        if abs(xdiff) > 100:
+                            mStep = 50
+                        elif abs(xdiff) > 30:
+                            mStep  = 30
+                        elif abs(xdiff) > 10:
+                            mStep = 10
+                        else:
+                            mStep = 5
+                        pico.move(deviceName.get(), motorXnum.get(), xsign*motorXmult.get()*mStep, motorLim.get())
                 else:
                     if abs(ydiff) > motorError.get():
-                        pico.move(deviceName.get(), motorYnum.get(), ysign*motorYmult.get()*motorStep.get(), motorLim.get())
+                        if abs(ydiff) > 100:
+                            mStep = 50
+                        elif abs(ydiff) > 30:
+                            mStep  = 30
+                        elif abs(ydiff) > 10:
+                            mStep = 10
+                        else:
+                            mStep = 5
+                        pico.move(deviceName.get(), motorYnum.get(), ysign*motorYmult.get()*mStep, motorLim.get())
         except:
             print('motor control failed')
     
@@ -1299,7 +1467,7 @@ def reAdjustPlot(img):
     px = 1/plt.rcParams['figure.dpi']
     y_extent2 = s2[0]*px
     x_extent2 = s2[1]*px
-    scale.set(0.8*s_sizey/s2[0])
+    scale.set(screenScale*s_sizey/s2[0])
     if scale.get()*s2[1] > s_sizex:
         scale.set(s_sizex/s2[1])
     fig.set_size_inches(scale.get()*x_extent2, scale.get()*y_extent2)
@@ -1318,64 +1486,59 @@ def reAdjustPlot(img):
     ROIBottomLine.set_color('white')
     ROITopLine.set_color('white')
     circ.set_color('red')
+    rect.remove()
+    try:
+        rect.remove()
+    except:
+        pass
+    place_gui_elems(scale.get()*y_extent2/px)
     
 st = time.time()
 
 ############################################################# FuncAnimation loop ##############################################################################
-
 def update_plot(i):
+    time_begin = time.time()
     frameCounter.set(i)
-    # et = time.time()
-    # labelText.set("%.1f"%(et-st))
-    try:
-        img = grabCamera()
-        if cameraChange.get() and cameraChange2.get():
-            reAdjustPlot(img)
-            cameraChange.set(False)
-            cameraChange2.set(False)
-        eData.addData(np.sum(img), shot_avg.get(), reset.get(), resetLong.get())
-        plotImg(img)
+    if not openBox.get():
         try:
-            rect.remove()
+            img = grabCamera()
+            if not skipFrame.get():
+                if cameraChange.get() and cameraChange2.get():
+                    reAdjustPlot(img)
+                    cameraChange.set(False)
+                    cameraChange2.set(False)
+                eData.addData(np.sum(img), shot_avg.get(), reset.get(), resetLong.get())
+                plotImg(img)
+                peak_and_fit(img)
+                plotCursors()
+                plotROI()
+                if EplotButton.get() == 1:
+                    plotEnergy(img)
+                plot_and_save(img)
+                stabilizeBeam()
+                if cameraChange.get():
+                    clearPlot()
+                    cameraChange2.set(True)
         except:
-            pass
-        peak_and_fit(img)
-        plotCursors()
-        plotROI()
-        if EplotButton.get() == 1:
-            plotEnergy(img)
-        plot_and_save(img)
-        stabilizeBeam()
-        if cameraChange.get():
-            clearPlot()
-            cameraChange2.set(True)
-    except:
-        print("failed to update frame")
+            print("failed to update frame")
+    else:
+    # pause displaying image to let GUI box load in all of its elements
+        if not startCount.get():
+            startCount.set(True)
+            boxFrame.set(i)
+        if i - boxFrame.get()>GUIPause.get():
+            openBox.set(False)
+            startCount.set(False)
+    time_end = time.time()
+    # bad load balancing when running multiple cameras
+    if time_end-time_begin <1.1*frameDelay.get() and not openBox.get():
+        time.sleep(frameDelay.get())
     return [im]
 
 ############################################################# Tkinter gui elements placement ##################################################################
 
 canvas.get_tk_widget().place(x=0, y=0)
-button_quit.place(x=s_sizex - 50, y=s_sizey-30)
-labelDir.place(x=500, y=s_sizey-75)
-camNameDir.place(x=150, y=s_sizey-60)
-energylabelDir.place(x=150, y=s_sizey-110)
-energyDir.place(x=150, y=s_sizey-90)
-stdlabelDir.place(x=240, y=s_sizey-110)
-stdDir.place(x=240, y=s_sizey-90)
-fluencelabelDir.place(x=340, y=s_sizey-110)
-fluenceDir.place(x=340, y=s_sizey-90)
-fwhmxlabelDir.place(x=450, y=s_sizey-110)
-fwhmxDir.place(x=450, y=s_sizey-90)
-fwhmylabelDir.place(x=540, y=s_sizey-110)
-fwhmyDir.place(x=540, y=s_sizey-90)
-gauss_fit_button.place(x=0, y=s_sizey-110)
-button_energy.place(x=0, y=s_sizey-80)
-button_ROI.place(x=0, y=s_sizey-55)
-button_save.place(x=75, y=s_sizey-80)
-button_cam.place(x=75, y = s_sizey-55)
-button_plot.place(x=0, y=s_sizey-30)
-buttom_motor.place(x=75, y=s_sizey-30)
+place_gui_elems(yvals_max)
 
 ############################################################# looping function ################################################################################
 if exposure_time.get() < 100000 and trigger_mode.get() != 'on':
