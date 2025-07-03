@@ -415,9 +415,40 @@ fluencelabelDir = Label(root, textvariable=fluencelabelText, font = ("arial",10)
 fluenceText = StringVar(value = "")
 fluenceDir = Label(root, textvariable=fluenceText, font = ("arial",20))
 
+root.rowconfigure(0, weight=2)  # Top half (img)
+root.rowconfigure(1, weight=1)  # Bottom half (tabs)
+root.rowconfigure(2, minsize = 25)  # Bottom half (tabs)
+root.columnconfigure(0, weight=1)
+
+main_frame = tkinter.Frame(root)
+main_frame.grid(row=0, column=0, sticky="nsew")
+tab_frame = tkinter.Frame(root)
+tab_frame.grid(row=1, column=0, sticky="nsew")
+bottom_frame = tkinter.Frame(root)
+bottom_frame.grid(row=2, column=0, sticky="nsew")
+
+tabControl = ttk.Notebook(tab_frame)
+
+mainTab = ttk.Frame(tabControl)
+energyTab = ttk.Frame(tabControl)
+savingTab = ttk.Frame(tabControl)
+ROITab = ttk.Frame(tabControl)
+CamerasTab = ttk.Frame(tabControl)
+PlotAdjTab = ttk.Frame(tabControl)
+MotorsTab = ttk.Frame(tabControl)
+
+tabControl.add(mainTab, text='Main Image')
+tabControl.add(energyTab, text='Energy/fl')
+tabControl.add(savingTab, text='Saving')
+tabControl.add(ROITab, text='ROI')
+tabControl.add(CamerasTab, text='Cameras')
+tabControl.add(PlotAdjTab, text='Plot Adj')
+tabControl.add(MotorsTab, text='Motors')
+tabControl.pack(expand=1, fill="both")
+
 def place_gui_elems(yvals_max):
     offset = 10
-    button_quit.place(x=s_sizex - 50, y=yvals_max + 50 - offset)
+    button_quit.place(x= s_sizex - 50, y=0)
     # labelDir.place(x=500, y=s_sizey-75)
     camNameDir.place(x=150, y=yvals_max + 50 - offset)
     energylabelDir.place(x=150, y=yvals_max - offset)
@@ -430,13 +461,12 @@ def place_gui_elems(yvals_max):
     fwhmxDir.place(x=450, y=yvals_max+20 - offset)
     fwhmylabelDir.place(x=540, y=yvals_max - offset)
     fwhmyDir.place(x=540, y=yvals_max+20 - offset)
-    button_energy.place(x=0, y=yvals_max - offset)
-    button_ROI.place(x=0, y=yvals_max + 25 - offset)
-    button_save.place(x=75, y=yvals_max - offset)
-    button_cam.place(x=75, y = yvals_max + 25 - offset)
-    button_plot.place(x=0, y=yvals_max + 50 - offset)
-    if usingMotors.get():
-        buttom_motor.place(x=75, y=yvals_max + 50 - offset)
+    #button_ROI.place(x=75, y=yvals_max  - offset - 25)
+    # button_save.place(x=150, y=yvals_max - offset - 25)
+    # button_cam.place(x=225, y = yvals_max - offset - 25)
+    # button_plot.place(x=300, y=yvals_max - offset - 25)
+    # if usingMotors.get():
+    #     buttom_motor.place(x=375, y=yvals_max- offset - 25)
     camNameDir.lift()
     energylabelDir.lift()
     energyDir.lift()
@@ -587,13 +617,13 @@ def stop():
     except:
         pass
     root.quit()
-    root.destroy()    
-button_quit = tkinter.Button(master=root, text="Quit", command = stop)
+    root.destroy()
+button_quit = tkinter.Button(bottom_frame, text="Quit", command = stop)
 
-################################################################ Eplot popup box ##############################################################################
-
+################################################################################################################################
 def clearEnergy():
     eData.__init__()
+
 
 def EplotButtonfcn():
     if EplotButton.get() != 1:
@@ -612,13 +642,14 @@ def EplotButtonfcn():
         energy_plot_line.set_visible(False)
     else:
         energy_plot.set_visible(True)
-        if EplotLong.get()==1:
+        if EplotLong.get() == 1:
             energy_plot_line_long.set_visible(True)
         energy_plot_line.set_visible(True)
         maxLine.set_visible(True)
         midLine.set_visible(True)
         botLine.set_visible(True)
-        
+
+
 def EplotLongfcn():
     if EplotLong.get() != 1:
         maxTextLong.set_text("")
@@ -627,48 +658,49 @@ def EplotLongfcn():
         energy_plot_line_long.set_visible(False)
     else:
         energy_plot_line_long.set_visible(True)
-        
+
+
 def Ecalfcn():
     config.read(iniFname)
-    EcalVal.set(EcalEnergy.get()/np.mean(eData.lineLong[-int(numToSum.get()):]))
+    EcalVal.set(EcalEnergy.get() / np.mean(eData.lineLong[-int(numToSum.get()):]))
     config[window.upper() + ' SETTINGS']['energy cal'] = str(EcalVal.get())
     with open(iniFname, 'w') as configfile:
         config.write(configfile)
-        
-def popup_energy():
-    openBox.set(True)
-    win = tkinter.Toplevel()
-    win.wm_title("Energy settings")
-    win.geometry("300x250"+"+"+str(origin[0])+"+"+str(origin[1]))
 
+
+def popup_energy(tab):
+    openBox.set(True)
+    win = tab
     clrE = ttk.Button(win, text="clear E plot", command=clearEnergy)
-    
-    showEplotButton = ttk.Checkbutton(win, text='E plot', variable=EplotButton, onvalue=1, offvalue=0, command=EplotButtonfcn)
-    showEplotLong = ttk.Checkbutton(win, text='long time scale', variable=EplotLong, onvalue=1, offvalue=0, command=EplotLongfcn)
+
+    showEplotButton = ttk.Checkbutton(win, text='E plot', variable=EplotButton, onvalue=1, offvalue=0,
+                                      command=EplotButtonfcn)
+    showEplotLong = ttk.Checkbutton(win, text='long time scale', variable=EplotLong, onvalue=1, offvalue=0,
+                                    command=EplotLongfcn)
 
     EcalButton = ttk.Button(win, text="run E cal", command=Ecalfcn)
-    EcallabelText = StringVar(value = "num to sum")
+    EcallabelText = StringVar(value="num to sum")
     EcallabelDir = Label(win, textvariable=EcallabelText)
     EcalEntry = ttk.Entry(win, textvariable=numToSum, width=5)
-    EcalEnergylabelText = StringVar(value = "energy (mJ)")
+    EcalEnergylabelText = StringVar(value="energy (mJ)")
     EcalEnergylabelDir = Label(win, textvariable=EcalEnergylabelText)
     EcalEnergyDir = ttk.Entry(win, textvariable=EcalEnergy, width=15)
-    shot_avgText = StringVar(value = "shots to avg:")
+    shot_avgText = StringVar(value="shots to avg:")
     shot_avgDir = Label(win, textvariable=shot_avgText)
     shot_avgEntry = ttk.Entry(win, textvariable=shot_avg, width=5)
-    energyLimitDir = Label(win, textvariable = StringVar(value = 'energy warning:'))
-    energyLimitEntry = ttk.Entry(win, textvariable = energyLimit, width = 5)
-    
+    energyLimitDir = Label(win, textvariable=StringVar(value='energy warning:'))
+    energyLimitEntry = ttk.Entry(win, textvariable=energyLimit, width=5)
+
     colorbarFlButton = ttk.Checkbutton(win, text='fluence colorbar', variable=colorbarFl, onvalue=True, offvalue=False)
     manualScaleButton = ttk.Checkbutton(win, text='manual colorbar', variable=manualScale, onvalue=True, offvalue=False)
-    flMaxText = StringVar(value = "colorscale max (mJ/cm^2)")
+    flMaxText = StringVar(value="colorscale max (mJ/cm^2)")
     flMaxDir = Label(win, textvariable=flMaxText)
     flMaxEntry = ttk.Entry(win, textvariable=flMax, width=5)
     showFlMaxButton = ttk.Checkbutton(win, text='peak/avg fl', variable=showFlMax, onvalue=True, offvalue=False)
-    flAngText = StringVar(value = "incidence angle:")
+    flAngText = StringVar(value="incidence angle:")
     flAngDir = Label(win, textvariable=flAngText)
     flAngEntry = ttk.Entry(win, textvariable=flAng, width=5)
-        
+
     clrE.place(x=0, y=0)
     showEplotButton.place(x=0, y=25)
     showEplotLong.place(x=0, y=50)
@@ -681,7 +713,7 @@ def popup_energy():
     EcalButton.place(x=0, y=170)
     energyLimitDir.place(x=0, y=195)
     energyLimitEntry.place(x=100, y=195)
-    
+
     colorbarFlButton.place(x=150, y=0)
     manualScaleButton.place(x=150, y=25)
     flMaxDir.place(x=150, y=50)
@@ -689,11 +721,7 @@ def popup_energy():
     showFlMaxButton.place(x=150, y=95)
     flAngDir.place(x=150, y=120)
     flAngEntry.place(x=240, y=120)
-    
-    b = ttk.Button(win, text="close window", command=win.destroy)
-    b.place(x=0, y=220)
-    
-button_energy = ttk.Button(root, text="Energy/fl", command=popup_energy)
+popup_energy(energyTab)
 
 ################################################################ ROI popup box ################################################################################
 
