@@ -67,6 +67,26 @@ def onclick(event):
 #         fig.canvas.mpl_disconnect(cid)
     return coords
 
+def onrelease(event):
+    global ix, iy
+    ix, iy = event.xdata, event.ydata
+    global coords
+    coords = [ix, iy]
+    ROIBox[1] = coords
+    if dragToSelectROI:
+        fillInROIField(ROIBox)
+#     if len(coords) == 2:
+#         fig.canvas.mpl_disconnect(cid)
+    return coords
+
+def on_tab_change(event):
+    tab = event.widget.tab('current')['text']
+    global dragToSelectROI
+    if tab == 'ROI':
+        dragToSelectROI = True
+    else:
+        dragToSelectROI = False
+
 def gauss(xpt, A, xoff, sig, off):
     return A*np.exp(-0.5*((xpt-xoff)/sig)**2)+off
 
@@ -303,6 +323,9 @@ wPosition = config[window.upper() + ' SETTINGS']['position']
 screen_size_horiz = int(config[window.upper() + ' SETTINGS']['horizontal screen size'])
 screen_size_vert = int(config[window.upper() + ' SETTINGS']['vertical screen size'])
 
+dragToSelectROI = False
+ROIBox = [[0,0],[0,0]]
+
 mon = config[window.upper() + ' SETTINGS']['monitor']
 if mon[-1] == '1':
     monitor = config['MONITOR RESOLUTION'][mon]
@@ -381,43 +404,10 @@ screen = str(s_sizex)+"x"+str(s_sizey)+"+"+str(origin[0])+"+"+str(origin[1])
 
 root.wm_title(window)
 root.geometry(screen)
-tabControl = ttk.Notebook(root)
-
-labelText = StringVar()
-labelText.set("")
-labelDir = Label(root, textvariable=labelText, font = ("arial",40))
-
-camNameText = StringVar(value = cam_name.get())
-camNameDir = Label(root, textvariable=camNameText, font = ("arial",20))
-
-fwhmxlabelText = StringVar(value = "")
-fwhmxlabelDir = Label(root, textvariable=fwhmxlabelText, font = ("arial",10))
-fwhmxText = StringVar(value = "")
-fwhmxDir = Label(root, textvariable=fwhmxText, font = ("arial",20))
-
-fwhmylabelText = StringVar(value = "")
-fwhmylabelDir = Label(root, textvariable=fwhmylabelText, font = ("arial",10))
-fwhmyText = StringVar(value = "")
-fwhmyDir = Label(root, textvariable=fwhmyText, font = ("arial",20))
-
-energylabelText = StringVar(value = "energy (mJ)")
-energylabelDir = Label(root, textvariable=energylabelText, font = ("arial",10))
-energyText = StringVar(value = "")
-energyDir = Label(root, textvariable=energyText, font = ("arial",20))
-
-stdlabelText = StringVar(value = "std dev (mJ)")
-stdlabelDir = Label(root, textvariable=stdlabelText, font = ("arial",10))
-stdText = StringVar(value = "")
-stdDir = Label(root, textvariable=stdText, font = ("arial",20))
-
-fluencelabelText = StringVar(value = "")
-fluencelabelDir = Label(root, textvariable=fluencelabelText, font = ("arial",10))
-fluenceText = StringVar(value = "")
-fluenceDir = Label(root, textvariable=fluenceText, font = ("arial",20))
 
 root.rowconfigure(0, weight=2)  # Top half (img)
 root.rowconfigure(1, weight=1)  # Bottom half (tabs)
-root.rowconfigure(2, minsize = 25)  # Bottom half (tabs)
+root.rowconfigure(2, minsize = 25)  # Bottom (quit button)
 root.columnconfigure(0, weight=1)
 
 main_frame = tkinter.Frame(root)
@@ -427,57 +417,75 @@ tab_frame.grid(row=1, column=0, sticky="nsew")
 bottom_frame = tkinter.Frame(root)
 bottom_frame.grid(row=2, column=0, sticky="nsew")
 
+############################## tabs ########################################
 tabControl = ttk.Notebook(tab_frame)
 
 mainTab = ttk.Frame(tabControl)
 energyTab = ttk.Frame(tabControl)
 savingTab = ttk.Frame(tabControl)
 ROITab = ttk.Frame(tabControl)
-CamerasTab = ttk.Frame(tabControl)
-PlotAdjTab = ttk.Frame(tabControl)
-MotorsTab = ttk.Frame(tabControl)
+camerasTab = ttk.Frame(tabControl)
+plotAdjTab = ttk.Frame(tabControl)
+motorsTab = ttk.Frame(tabControl)
 
 tabControl.add(mainTab, text='Main Image')
 tabControl.add(energyTab, text='Energy/fl')
 tabControl.add(savingTab, text='Saving')
 tabControl.add(ROITab, text='ROI')
-tabControl.add(CamerasTab, text='Cameras')
-tabControl.add(PlotAdjTab, text='Plot Adj')
-tabControl.add(MotorsTab, text='Motors')
+tabControl.add(camerasTab, text='Cameras')
+tabControl.add(plotAdjTab, text='Plot Adj')
+tabControl.add(motorsTab, text='Motors')
 tabControl.pack(expand=1, fill="both")
 
+#################################### main tab #######################################
+
+labelText = StringVar()
+labelText.set("")
+labelDir = Label(mainTab, textvariable=labelText, font = ("arial",40))
+
+camNameText = StringVar(value = 'TEST') #cam_name.get()
+camNameDir = Label(bottom_frame, textvariable=camNameText, font = ("arial",10))
+
+fwhmxlabelText = StringVar(value = "")
+fwhmxlabelDir = Label(mainTab, textvariable=fwhmxlabelText, font = ("arial",10))
+fwhmxText = StringVar(value = "")
+fwhmxDir = Label(mainTab, textvariable=fwhmxText, font = ("arial",20))
+
+fwhmylabelText = StringVar(value = "")
+fwhmylabelDir = Label(mainTab, textvariable=fwhmylabelText, font = ("arial",10))
+fwhmyText = StringVar(value = "")
+fwhmyDir = Label(mainTab, textvariable=fwhmyText, font = ("arial",20))
+
+energylabelText = StringVar(value = "energy (mJ)")
+energylabelDir = Label(mainTab, textvariable=energylabelText, font = ("arial",10))
+energyText = StringVar(value = "")
+energyDir = Label(mainTab, textvariable=energyText, font = ("arial",20))
+
+stdlabelText = StringVar(value = "std dev (mJ)")
+stdlabelDir = Label(mainTab, textvariable=stdlabelText, font = ("arial",10))
+stdText = StringVar(value = "")
+stdDir = Label(mainTab, textvariable=stdText, font = ("arial",20))
+
+fluencelabelText = StringVar(value = "")
+fluencelabelDir = Label(mainTab, textvariable=fluencelabelText, font = ("arial",10))
+fluenceText = StringVar(value = "")
+fluenceDir = Label(mainTab, textvariable=fluenceText, font = ("arial",20))
+
 def place_gui_elems(yvals_max):
-    offset = 10
+    #offset = 10
     button_quit.place(x= s_sizex - 50, y=0)
     # labelDir.place(x=500, y=s_sizey-75)
-    camNameDir.place(x=150, y=yvals_max + 50 - offset)
-    energylabelDir.place(x=150, y=yvals_max - offset)
-    energyDir.place(x=150, y=yvals_max+20 - offset)
-    stdlabelDir.place(x=240, y=yvals_max - offset)
-    stdDir.place(x=240, y=yvals_max+20 - offset)
-    fluencelabelDir.place(x=340, y=yvals_max - offset)
-    fluenceDir.place(x=340, y=yvals_max+20 - offset)
-    fwhmxlabelDir.place(x=450, y=yvals_max - offset)
-    fwhmxDir.place(x=450, y=yvals_max+20 - offset)
-    fwhmylabelDir.place(x=540, y=yvals_max - offset)
-    fwhmyDir.place(x=540, y=yvals_max+20 - offset)
-    #button_ROI.place(x=75, y=yvals_max  - offset - 25)
-    # button_save.place(x=150, y=yvals_max - offset - 25)
-    # button_cam.place(x=225, y = yvals_max - offset - 25)
-    # button_plot.place(x=300, y=yvals_max - offset - 25)
-    # if usingMotors.get():
-    #     buttom_motor.place(x=375, y=yvals_max- offset - 25)
-    camNameDir.lift()
-    energylabelDir.lift()
-    energyDir.lift()
-    stdlabelDir.lift()
-    stdDir.lift()
-    fluencelabelDir.lift()
-    fluenceDir.lift()
-    fwhmxlabelDir.lift()
-    fwhmxDir.lift()
-    fwhmylabelDir.lift()
-    fwhmyDir.lift()
+    camNameDir.place(x=10, y= 0)
+    energylabelDir.place(x=0, y=0)
+    energyDir.place(x=0, y=20)
+    stdlabelDir.place(x=90, y=0)
+    stdDir.place(x=90, y=20)
+    fluencelabelDir.place(x=190, y=0)
+    fluenceDir.place(x=190, y=20)
+    fwhmxlabelDir.place(x=300, y=0)
+    fwhmxDir.place(x=300, y=20)
+    fwhmylabelDir.place(x=390, y=0)
+    fwhmyDir.place(x=390, y=20)
 
 ################################################################ create plot structure ########################################################################
 
@@ -515,6 +523,9 @@ energy_plot, = plt.plot([0],[0], 'o')
 energy_plot_line, = plt.plot([0],[0], 'r-')
 
 cid = fig.canvas.mpl_connect('button_press_event', onclick)
+rid = fig.canvas.mpl_connect('button_release_event', onrelease)
+tabControl.bind('<<NotebookTabChanged>>', on_tab_change)
+print(tabControl.tab(tabControl.select(), "text"))
 maxText = plt.text(0, 0.8*y_extent/px-1,"", color = 'white', path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 midText = plt.text(0, 0.9*y_extent/px-1,"", color = 'white', path_effects=[pe.withStroke(linewidth=2, foreground="black")])
 botText = plt.text(0, y_extent/px-1,"", color = 'white', path_effects=[pe.withStroke(linewidth=2, foreground="black")])
@@ -540,7 +551,7 @@ fig.tight_layout()
 im.axes.add_patch(rect)
 im.axes.add_patch(circ)
 
-canvas = FigureCanvasTkAgg(fig, master=root)  # A tk.DrawingArea.
+canvas = FigureCanvasTkAgg(fig, master=main_frame)  # A tk.DrawingArea.
 canvas.draw()
 
 ################################################################ camera refresh functions + logic variables  ##################################################
@@ -620,7 +631,7 @@ def stop():
     root.destroy()
 button_quit = tkinter.Button(bottom_frame, text="Quit", command = stop)
 
-################################################################################################################################
+############################################################ energy ####################################################################
 def clearEnergy():
     eData.__init__()
 
@@ -708,11 +719,11 @@ def popup_energy(tab):
     shot_avgEntry.place(x=75, y=75)
     EcallabelDir.place(x=0, y=100)
     EcalEntry.place(x=75, y=100)
-    EcalEnergylabelDir.place(x=0, y=125)
-    EcalEnergyDir.place(x=0, y=145)
-    EcalButton.place(x=0, y=170)
-    energyLimitDir.place(x=0, y=195)
-    energyLimitEntry.place(x=100, y=195)
+    EcalEnergylabelDir.place(x=320, y=0)
+    EcalEnergyDir.place(x=320, y=20)
+    EcalButton.place(x=320, y=45)
+    energyLimitDir.place(x=320, y=70)
+    energyLimitEntry.place(x=420, y=70)
 
     colorbarFlButton.place(x=150, y=0)
     manualScaleButton.place(x=150, y=25)
@@ -721,12 +732,13 @@ def popup_energy(tab):
     showFlMaxButton.place(x=150, y=95)
     flAngDir.place(x=150, y=120)
     flAngEntry.place(x=240, y=120)
+
 popup_energy(energyTab)
 
 ################################################################ ROI popup box ################################################################################
 
 def ROIBboxfcn():
-    if ROIBboxButton.get()==1:
+    if ROIBboxButton.get() == 1:
         ROIShow.set(True)
         if ROIEnable.get():
             cameraChange.set(True)
@@ -742,8 +754,19 @@ def ROIBboxfcn():
         ROIBottomLine.set_visible(False)
         ROITopLine.set_visible(False)
 
+def fillInROIField(coord):
+    left = int(min(coord[0][0],coord[1][0]))
+    bottom = int(min(coord[0][1], coord[1][1]))
+    right = int(max(coord[0][0], coord[1][0]))
+    top = int(max(coord[0][1], coord[1][1]))
+
+    ROILeft.set(left)
+    ROIRight.set(right)
+    ROIBottom.set(bottom)
+    ROITop.set(top)
+
 def ROIChangefcn():
-    if ROIBboxButton.get()==1:
+    if ROIBboxButton.get() == 1:
         ROIBboxButton.set(0)
         ROIBboxfcn()
         cameraChange.set(True)
@@ -753,7 +776,8 @@ def ROIChangefcn():
     config[window.upper() + ' SETTINGS']['ROIEnable'] = str(ROIEnable.get())
     with open(iniFname, 'w') as configfile:
         config.write(configfile)
-        
+
+
 def saveROIfcn():
     # config.read(iniFname)
     config[window.upper() + ' SETTINGS']['ROILeft'] = str(ROILeft.get())
@@ -762,78 +786,71 @@ def saveROIfcn():
     config[window.upper() + ' SETTINGS']['ROITop'] = str(ROITop.get())
     with open(iniFname, 'w') as configfile:
         config.write(configfile)
-    
-def popup_ROI():
-    openBox.set(True)
-    winROI = tkinter.Toplevel()
-    winROI.wm_title("ROI settings")
-    winROI.geometry("300x150"+"+"+str(int(origin[0]))+"+"+str(int(origin[1]+0.8*yvals_max)))
-    
-    showROIBboxButton = ttk.Checkbutton(winROI, text='show ROIBbox', variable=ROIBboxButton, onvalue=1, offvalue=0, command=ROIBboxfcn)
-    showROIBboxButton.place(x=0, y=0)
-    
-    ROIlabelText = StringVar(value = "ROI (left, right, bottom, top)")
-    ROIlabelDir = Label(winROI, textvariable=ROIlabelText)
-    ROILeftDir = ttk.Entry(winROI, textvariable=ROILeft, width=5)
-    ROIRightDir = ttk.Entry(winROI, textvariable=ROIRight, width=5)
-    ROIBottomDir = ttk.Entry(winROI, textvariable=ROIBottom, width=5)
-    ROITopDir = ttk.Entry(winROI, textvariable=ROITop, width=5)
-    
-    ROIEnableButton = ttk.Checkbutton(winROI, text='Enable ROI?', variable=ROIEnable, onvalue=True, offvalue=False, command=ROIChangefcn)
 
-    saveROIButton = ttk.Button(winROI, text="Save ROI?", command=saveROIfcn)
-    
+
+def popup_ROI(tab):
+    openBox.set(True)
+    win = tab
+    showROIBboxButton = ttk.Checkbutton(win, text='show ROIBbox', variable=ROIBboxButton, onvalue=1, offvalue=0,
+                                        command=ROIBboxfcn)
+    showROIBboxButton.place(x=0, y=0)
+
+    ROIlabelText = StringVar(value="ROI (left, right, bottom, top)")
+    ROIlabelDir = Label(win, textvariable=ROIlabelText)
+    ROILeftDir = ttk.Entry(win, textvariable=ROILeft, width=5)
+    ROIRightDir = ttk.Entry(win, textvariable=ROIRight, width=5)
+    ROIBottomDir = ttk.Entry(win, textvariable=ROIBottom, width=5)
+    ROITopDir = ttk.Entry(win, textvariable=ROITop, width=5)
+
+    ROIEnableButton = ttk.Checkbutton(win, text='Enable ROI?', variable=ROIEnable, onvalue=True, offvalue=False,
+                                      command=ROIChangefcn)
+
+    saveROIButton = ttk.Button(win, text="Save ROI?", command=saveROIfcn)
+
     ROIlabelDir.place(x=0, y=20)
     ROILeftDir.place(x=0, y=45)
     ROIRightDir.place(x=40, y=45)
     ROIBottomDir.place(x=80, y=45)
     ROITopDir.place(x=120, y=45)
-    
+
     ROIEnableButton.place(x=170, y=0)
     saveROIButton.place(x=170, y=30)
-    
-    bROI = ttk.Button(winROI, text="close window", command=winROI.destroy)
-    bROI.place(x=0, y=70)
-    
-button_ROI = ttk.Button(root, text="ROI", command=popup_ROI)
+
+popup_ROI(ROITab)
+
 
 ################################################################ Save popup box ###############################################################################
 
 def setSaveTimefcn():
     lastSave.set(0)
 
-def popup_save():
+def popup_save(tab):
     openBox.set(True)
-    winSave = tkinter.Toplevel()
-    winSave.wm_title("Save settings")
-    winSave.geometry("350x180"+"+"+str(int(s_sizex-350+origin[0]))+"+"+str(origin[1]))
-    
-    saveImagesButton = ttk.Checkbutton(winSave, text='save images', variable=saveImages, onvalue=True, offvalue=False, command = setSaveTimefcn)
-    saveFolderlabelDir = Label(winSave, textvariable=StringVar(value='save folder'))
-    saveFolderEntry = ttk.Entry(winSave, textvariable=saveFolder, width=50)
-    saveNamelabelDir = Label(winSave, textvariable=StringVar(value='save file name'))
-    saveNameEntry = ttk.Entry(winSave, textvariable=saveName, width=50)
-    saveFreqlabelText = StringVar(value = "num of images to save every interval:")
-    saveFreqlabelDir = Label(winSave, textvariable=saveFreqlabelText)
-    saveFreqDir = ttk.Entry(winSave, textvariable=saveFreq, width=5)
-    saveTimelabelText = StringVar(value = "interval time separation (minutes); 0 to continously save:")
-    saveTimelabelDir = Label(winSave, textvariable=saveTimelabelText)
-    saveTimeDir = ttk.Entry(winSave, textvariable=saveTime, width=5)
-    
+    win = tab
+    saveImagesButton = ttk.Checkbutton(win, text='save images', variable=saveImages, onvalue=True, offvalue=False,
+                                       command=setSaveTimefcn)
+    saveFolderlabelDir = Label(win, textvariable=StringVar(value='save folder'))
+    saveFolderEntry = ttk.Entry(win, textvariable=saveFolder, width=50)
+    saveNamelabelDir = Label(win, textvariable=StringVar(value='save file name'))
+    saveNameEntry = ttk.Entry(win, textvariable=saveName, width=50)
+    saveFreqlabelText = StringVar(value="num of images to save every interval:")
+    saveFreqlabelDir = Label(win, textvariable=saveFreqlabelText)
+    saveFreqDir = ttk.Entry(win, textvariable=saveFreq, width=5)
+    saveTimelabelText = StringVar(value="interval time separation (minutes); 0 to continously save:")
+    saveTimelabelDir = Label(win, textvariable=saveTimelabelText)
+    saveTimeDir = ttk.Entry(win, textvariable=saveTime, width=5)
+
     saveImagesButton.place(x=0, y=0)
     saveFreqlabelDir.place(x=0, y=20)
     saveFreqDir.place(x=200, y=20)
-    saveTimelabelDir.place(x=0, y=40)
-    saveTimeDir.place(x=300, y=40)
-    saveFolderlabelDir.place(x=0, y=60)
-    saveFolderEntry.place(x=0, y=80)
-    saveNamelabelDir.place(x=0, y=105)
-    saveNameEntry.place(x=0, y=125)
-    
-    bSave = ttk.Button(winSave, text="close window", command=winSave.destroy)
-    bSave.place(x=0, y=150)
-    
-button_save = ttk.Button(root, text="Saving", command=popup_save)
+    saveTimelabelDir.place(x=0, y=45)
+    saveTimeDir.place(x=300, y=45)
+    saveFolderlabelDir.place(x=0, y=65)
+    saveFolderEntry.place(x=0, y=85)
+    saveNamelabelDir.place(x=0, y=110)
+    saveNameEntry.place(x=0, y=130)
+
+popup_save(savingTab)
 
 ################################################################ camera popup box ##############################################################################
 
@@ -860,46 +877,41 @@ def camChangefcn():
         with open(iniFname, 'w') as configfile:
             config.write(configfile)
 
-def popup_camera():
+def popup_camera(tab):
     openBox.set(True)
-    winCam = tkinter.Toplevel()
-    winCam.wm_title("Camera settings")
-    winCam.geometry("250x180"+"+"+str(origin[0])+"+"+str(int(origin[1]+170)))
-    
-    exposure_setting = ttk.Entry(winCam, textvariable=exposure_num, width=15)
+    win = tab
+    exposure_setting = ttk.Entry(win, textvariable=exposure_num, width=15)
 
-    cameraText = StringVar(value = "camera select")
-    cameraDir = Label(winCam, textvariable = cameraText)
-    drop = OptionMenu(winCam, clicked, *cam.options)
-    
-    exposureText=StringVar()
+    cameraText = StringVar(value="camera select")
+    cameraDir = Label(win, textvariable=cameraText)
+    drop = OptionMenu(win, clicked, *cam.options)
+
+    exposureText = StringVar()
     exposureText.set("exposure time (us)")
-    exposureDir=Label(winCam, textvariable=exposureText)
+    exposureDir = Label(win, textvariable=exposureText)
 
-    triggerText=StringVar()
+    triggerText = StringVar()
     triggerText.set("trigger mode")
-    triggerDir=Label(winCam, textvariable=triggerText)
-    triggerDrop = OptionMenu(winCam, triggerClicked, *['on', 'off'])
-    
-    timeoutLabel = Label(winCam, textvariable = StringVar(value = 'timeout (ms):'))
-    timeoutEntry = ttk.Entry(winCam, textvariable = timeout, width = 10)
-    
-    saveCamSettings = ttk.Button(winCam, text="change cam settings", command=camChangefcn)
-    
+    triggerDir = Label(win, textvariable=triggerText)
+    triggerDrop = OptionMenu(win, triggerClicked, *['on', 'off'])
+
+    timeoutLabel = Label(win, textvariable=StringVar(value='timeout (ms):'))
+    timeoutEntry = ttk.Entry(win, textvariable=timeout, width=10)
+
+    saveCamSettings = ttk.Button(win, text="change cam settings", command=camChangefcn)
+
     cameraDir.place(x=0, y=0)
     drop.place(x=0, y=20)
     exposureDir.place(x=0, y=50)
     exposure_setting.place(x=0, y=70)
     triggerDir.place(x=120, y=50)
-    triggerDrop.place(x=120, y=70) 
+    triggerDrop.place(x=120, y=70)
     timeoutLabel.place(x=0, y=100)
     timeoutEntry.place(x=80, y=100)
     saveCamSettings.place(x=0, y=125)
-    
-    bCam = ttk.Button(winCam, text="close window", command=winCam.destroy)
-    bCam.place(x=0, y=150)
-    
-button_cam = ttk.Button(root, text="Cameras", command=popup_camera)
+
+popup_camera(camerasTab)
+
 
 ################################################################ plot settings popup box #######################################################################
 
@@ -944,45 +956,46 @@ def autoCursorfcn():
         cursorX.set(coords[0])
         cursorY.set(coords[1])
             
-def popup_plot():
+def popup_plot(tab):
     openBox.set(True)
-    winPlot = tkinter.Toplevel()
-    winPlot.wm_title("Plot settings")
-    winPlot.geometry("250x250"+"+"+str(int(origin[0]))+"+"+str(origin[1]+250))
-    
-    colorText = StringVar(value = "color scale")
-    colorDir = Label(winPlot, textvariable = colorText)
-    colorDrop = OptionMenu(winPlot, colorClicked, *['viridis', 'hsv', 'plasma'])
-    scaleButton = ttk.Checkbutton(winPlot, text='clrbar on/off', variable=clrScale, onvalue=True, offvalue=False, command = clrScalefcn)
-    bkgndPathlabelText = StringVar(value = "Bckgnd file path")
-    bkgndPathlabelDir = Label(winPlot, textvariable=bkgndPathlabelText)
-    bkgndPath = ttk.Entry(winPlot, textvariable=bkgndFile)
-    saveBkgnd = ttk.Button(winPlot, text="save bkgnd", command=saveBkgndfcn)
-    subtBkgndButton = ttk.Checkbutton(winPlot, text='subt bkgnd', variable=subtBkgnd, onvalue=True, offvalue=False, command=subtBkgndfcn)
-    autoCursorButton = ttk.Checkbutton(winPlot, text='autocursor?', variable=autoCursor, onvalue=True, offvalue=False, command=autoCursorfcn)
-    cursorText = StringVar(value = "cursor coords (x, y)")
-    cursorDir = Label(winPlot, textvariable = cursorText)
-    cursorXlabel = Label(winPlot, textvariable=cursorX, width = 5)
-    cursorYlabel = Label(winPlot, textvariable=cursorY, width = 5)
-    cursorXstdlabel = Label(winPlot, textvariable=cursorXstd, width=5)
-    cursorYstdlabel = Label(winPlot, textvariable=cursorYstd, width=5)
-    gauss_fit_button = ttk.Checkbutton(winPlot, text='Gauss fit', variable=fitting, onvalue=True, offvalue=False)
-    
-    cursorFixedText = StringVar(value = "fixed cursor coords and radius (x, y, rad)")
-    cursorFixedDir = Label(winPlot, textvariable = cursorFixedText)
-    cursorXentryFixed = ttk.Entry(winPlot, textvariable=cursorXfixed, width = 5)
-    cursorYentryFixed = ttk.Entry(winPlot, textvariable=cursorYfixed, width = 5)
-    cursorRadentry = ttk.Entry(winPlot, textvariable=cursorRad, width = 5)
-    saveCursorButton = ttk.Button(winPlot, text="save settings", command=saveCursorfcn)
-    cursorAvgText = StringVar(value = "num to avg:")
-    cursorAvgDir = Label(winPlot, textvariable = cursorAvgText)
-    cursorAvgentry = ttk.Entry(winPlot, textvariable=cursorAvg, width=5)
-    
+    win = tab
+
+    colorText = StringVar(value="color scale")
+    colorDir = Label(win, textvariable=colorText)
+    colorDrop = OptionMenu(win, colorClicked, *['viridis', 'hsv', 'plasma'])
+    scaleButton = ttk.Checkbutton(win, text='clrbar on/off', variable=clrScale, onvalue=True, offvalue=False,
+                                  command=clrScalefcn)
+    bkgndPathlabelText = StringVar(value="Bckgnd file path")
+    bkgndPathlabelDir = Label(win, textvariable=bkgndPathlabelText)
+    bkgndPath = ttk.Entry(win, textvariable=bkgndFile)
+    saveBkgnd = ttk.Button(win, text="save bkgnd", command=saveBkgndfcn)
+    subtBkgndButton = ttk.Checkbutton(win, text='subt bkgnd', variable=subtBkgnd, onvalue=True, offvalue=False,
+                                      command=subtBkgndfcn)
+    autoCursorButton = ttk.Checkbutton(win, text='autocursor?', variable=autoCursor, onvalue=True, offvalue=False,
+                                       command=autoCursorfcn)
+    cursorText = StringVar(value="cursor coords (x, y)")
+    cursorDir = Label(win, textvariable=cursorText)
+    cursorXlabel = Label(win, textvariable=cursorX, width=5)
+    cursorYlabel = Label(win, textvariable=cursorY, width=5)
+    cursorXstdlabel = Label(win, textvariable=cursorXstd, width=5)
+    cursorYstdlabel = Label(win, textvariable=cursorYstd, width=5)
+    gauss_fit_button = ttk.Checkbutton(win, text='Gauss fit', variable=fitting, onvalue=True, offvalue=False)
+
+    cursorFixedText = StringVar(value="fixed cursor coords and radius (x, y, rad)")
+    cursorFixedDir = Label(win, textvariable=cursorFixedText)
+    cursorXentryFixed = ttk.Entry(win, textvariable=cursorXfixed, width=5)
+    cursorYentryFixed = ttk.Entry(win, textvariable=cursorYfixed, width=5)
+    cursorRadentry = ttk.Entry(win, textvariable=cursorRad, width=5)
+    saveCursorButton = ttk.Button(win, text="save settings", command=saveCursorfcn)
+    cursorAvgText = StringVar(value="num to avg:")
+    cursorAvgDir = Label(win, textvariable=cursorAvgText)
+    cursorAvgentry = ttk.Entry(win, textvariable=cursorAvg, width=5)
+
     scaleButton.place(x=0, y=0)
     colorDir.place(x=0, y=20)
     colorDrop.place(x=0, y=35)
     autoCursorButton.place(x=0, y=65)
-    
+
     cursorDir.place(x=0, y=90)
     cursorXlabel.place(x=0, y=110)
     cursorXstdlabel.place(x=30, y=110)
@@ -990,23 +1003,20 @@ def popup_plot():
     cursorYstdlabel.place(x=100, y=110)
     cursorAvgDir.place(x=150, y=110)
     cursorAvgentry.place(x=220, y=110)
-    gauss_fit_button.place(x=150, y=180)
-    
-    cursorFixedDir.place(x=0, y=135)
-    cursorXentryFixed.place(x=0, y=155)
-    cursorYentryFixed.place(x=50, y=155)
-    cursorRadentry.place(x=100, y=155)
-    saveCursorButton.place(x=0, y=180)
-    
+    gauss_fit_button.place(x=450, y=45)
+
+    cursorFixedDir.place(x=300, y=0)
+    cursorXentryFixed.place(x=300, y=20)
+    cursorYentryFixed.place(x=350, y=20)
+    cursorRadentry.place(x=400, y=20)
+    saveCursorButton.place(x=300, y=45)
+
     bkgndPathlabelDir.place(x=110, y=0)
     bkgndPath.place(x=110, y=25)
     subtBkgndButton.place(x=110, y=50)
     saveBkgnd.place(x=110, y=80)
-    
-    bPlot = ttk.Button(winPlot, text="close window", command=winPlot.destroy)
-    bPlot.place(x=0, y=210)
-    
-button_plot = ttk.Button(root, text="Plot adj", command=popup_plot)
+
+popup_plot(plotAdjTab)
 
 ################################################################  motor control popup box ######################################################################
 
@@ -1048,57 +1058,52 @@ def jogMinusYfcn():
     if motorsInitialized.get():
         pico.move(deviceName.get(), motorYnum.get(), -1*motorYmult.get()*motorStep.get(), motorLim.get())
 
-def popup_motor():    
+def popup_motor(tab):
     openBox.set(True)
-    winMotor = tkinter.Toplevel()
-    winMotor.wm_title("Motor settings")
-    winMotor.geometry("250x300"+"+"+str(origin[0])+"+"+str(origin[1]+300))
-    
-    initializeOnButton = ttk.Button(winMotor, text='init motors', command = initializeOnfcn, width = 10)
-    
-    motorOnButton = ttk.Checkbutton(winMotor, text='stabilizers on?', variable=motorOn, onvalue=True, offvalue=False)
-    
-    motorErrorText = StringVar(value = "allowed motor error (pix):")
-    motorErrorDir = Label(winMotor, textvariable = motorErrorText)
-    motorErrorEntry = ttk.Entry(winMotor, textvariable=motorError, width = 5)
-    
-    motorText = StringVar(value = "position to center motors to: ")
-    motorXDir = Label(winMotor, textvariable = StringVar(value='x'))
-    motorYDir = Label(winMotor, textvariable = StringVar(value='y'))
-    motorDir = Label(winMotor, textvariable = motorText)
-    motorXEntry = ttk.Entry(winMotor, textvariable=motorX, width = 5)
-    motorYEntry = ttk.Entry(winMotor, textvariable=motorY, width = 5)
-    
-    motorThresholdText = StringVar(value = "threshold before motor turns on:")
-    motorThresholdDir = Label(winMotor, textvariable = motorThresholdText)
-    motorThresholdEntry = ttk.Entry(winMotor, textvariable=motorThreshold, width = 5)
-    saveMotorButton = ttk.Button(winMotor, text="save settings", command=saveMotorfcn)
-    
-    motorStepText = StringVar(value = "motor step size:")
-    motorStepDir = Label(winMotor, textvariable = motorStepText)
-    motorStepEntry = ttk.Entry(winMotor, textvariable=motorStep, width = 5)
-    
-    deviceNameDir = Label(winMotor, textvariable=StringVar(value='device name'))
-    deviceNameEntry = ttk.Entry(winMotor, textvariable=deviceName, width = 10)
-    
-    motorXnumDir = Label(winMotor, textvariable=StringVar(value='x num:'))
-    motorXnumEntry = ttk.Entry(winMotor, textvariable=motorXnum, width = 5)
-    motorYnumDir = Label(winMotor, textvariable=StringVar(value='y num:'))
-    motorYnumEntry = ttk.Entry(winMotor, textvariable=motorYnum, width = 5)
-    
-    motorXmultDir = Label(winMotor, textvariable=StringVar(value='x mult:'))
-    motorXmultEntry = ttk.Entry(winMotor, textvariable=motorXmult, width = 5)
-    motorYmultDir = Label(winMotor, textvariable=StringVar(value='y mult:'))
-    motorYmultEntry = ttk.Entry(winMotor, textvariable=motorYmult, width = 5)
-    
-    jogDir = Label(winMotor, textvariable=StringVar(value='Jog:'))
-    jogPlusXButton = ttk.Button(winMotor, text="X+", command=jogPlusXfcn, width = 5)
-    jogMinusXButton = ttk.Button(winMotor, text="X-", command=jogMinusXfcn, width = 5)
-    jogPlusYButton = ttk.Button(winMotor, text="Y+", command=jogPlusYfcn, width = 5)
-    jogMinusYButton = ttk.Button(winMotor, text="Y-", command=jogMinusYfcn, width = 5)
-    
-    initializeOnButton.place(x=0, y=0)
-    motorOnButton.place(x=70, y=0)
+    win= tab
+
+    motorOnButton = ttk.Checkbutton(win, text='stabilizers on?', variable=motorOn, onvalue=True, offvalue=False)
+
+    motorErrorText = StringVar(value="allowed motor error (pix):")
+    motorErrorDir = Label(win, textvariable=motorErrorText)
+    motorErrorEntry = ttk.Entry(win, textvariable=motorError, width=5)
+
+    motorText = StringVar(value="position to center motors to: ")
+    motorXDir = Label(win, textvariable=StringVar(value='x'))
+    motorYDir = Label(win, textvariable=StringVar(value='y'))
+    motorDir = Label(win, textvariable=motorText)
+    motorXEntry = ttk.Entry(win, textvariable=motorX, width=5)
+    motorYEntry = ttk.Entry(win, textvariable=motorY, width=5)
+
+    motorThresholdText = StringVar(value="threshold before motor turns on:")
+    motorThresholdDir = Label(win, textvariable=motorThresholdText)
+    motorThresholdEntry = ttk.Entry(win, textvariable=motorThreshold, width=5)
+    saveMotorButton = ttk.Button(win, text="save settings", command=saveMotorfcn)
+
+    motorStepText = StringVar(value="motor step size:")
+    motorStepDir = Label(win, textvariable=motorStepText)
+    motorStepEntry = ttk.Entry(win, textvariable=motorStep, width=5)
+
+    deviceNameDir = Label(win, textvariable=StringVar(value='device name'))
+    deviceNameEntry = ttk.Entry(win, textvariable=deviceName, width=10)
+
+    motorXnumDir = Label(win, textvariable=StringVar(value='x num:'))
+    motorXnumEntry = ttk.Entry(win, textvariable=motorXnum, width=5)
+    motorYnumDir = Label(win, textvariable=StringVar(value='y num:'))
+    motorYnumEntry = ttk.Entry(win, textvariable=motorYnum, width=5)
+
+    motorXmultDir = Label(win, textvariable=StringVar(value='x mult:'))
+    motorXmultEntry = ttk.Entry(win, textvariable=motorXmult, width=5)
+    motorYmultDir = Label(win, textvariable=StringVar(value='y mult:'))
+    motorYmultEntry = ttk.Entry(win, textvariable=motorYmult, width=5)
+
+    jogDir = Label(win, textvariable=StringVar(value='Jog:'))
+    jogPlusXButton = ttk.Button(win, text="X+", command=jogPlusXfcn, width=5)
+    jogMinusXButton = ttk.Button(win, text="X-", command=jogMinusXfcn, width=5)
+    jogPlusYButton = ttk.Button(win, text="Y+", command=jogPlusYfcn, width=5)
+    jogMinusYButton = ttk.Button(win, text="Y-", command=jogMinusYfcn, width=5)
+
+    motorOnButton.place(x=0, y=0)
     motorDir.place(x=0, y=25)
     motorXDir.place(x=170, y=5)
     motorYDir.place(x=210, y=5)
@@ -1110,27 +1115,28 @@ def popup_motor():
     motorErrorEntry.place(x=140, y=75)
     motorStepDir.place(x=0, y=100)
     motorStepEntry.place(x=90, y=100)
-    motorXnumDir.place(x=0, y=125)
-    motorXnumEntry.place(x=50, y=125)
-    motorYnumDir.place(x=100, y=125)
-    motorYnumEntry.place(x=150, y=125)
-    motorXmultDir.place(x=0, y=150)
-    motorXmultEntry.place(x=50, y=150)
-    motorYmultDir.place(x=100, y=150)
-    motorYmultEntry.place(x=150, y=150)
-    jogDir.place(x=0, y=175)
-    jogPlusXButton.place(x=50, y=175)
-    jogMinusXButton.place(x=100, y=175)
-    jogPlusYButton.place(x=150, y=175)
-    jogMinusYButton.place(x=200, y=175)
-    deviceNameDir.place(x=0, y=200)
-    deviceNameEntry.place(x=80, y=200)
-    saveMotorButton.place(x=0, y=225)
-    
-    bMotor = ttk.Button(winMotor, text="close window", command=winMotor.destroy)
-    bMotor.place(x=0, y=250)
-    
-buttom_motor = ttk.Button(root, text="Motors", command=popup_motor)
+    motorXnumDir.place(x=275, y=0)
+    motorXnumEntry.place(x=325, y=0)
+    motorYnumDir.place(x=375, y=0)
+    motorYnumEntry.place(x=425, y=0)
+    motorXmultDir.place(x=275, y=25)
+    motorXmultEntry.place(x=325, y=25)
+    motorYmultDir.place(x=375, y=25)
+    motorYmultEntry.place(x=425, y=25)
+    jogDir.place(x=275, y=50)
+    jogPlusXButton.place(x=325, y=50)
+    jogMinusXButton.place(x=375, y=50)
+    jogPlusYButton.place(x=425, y=50)
+    jogMinusYButton.place(x=475, y=50)
+    deviceNameDir.place(x=275, y=75)
+    deviceNameEntry.place(x=355, y=75)
+    saveMotorButton.place(x=275, y=100)
+
+if usingMotors.get():
+    popup_motor(motorsTab)
+else:
+    nullMotorText = Label(motorsTab, textvariable="No motors set in settings")
+    nullMotorText.place(pady = 5)
 
 ################################################################ funcAnimation functions #######################################################################
 
