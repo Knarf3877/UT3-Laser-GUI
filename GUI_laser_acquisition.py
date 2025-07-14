@@ -323,6 +323,8 @@ wPosition = config[window.upper() + ' SETTINGS']['position']
 screen_size_horiz = int(config[window.upper() + ' SETTINGS']['horizontal screen size'])
 screen_size_vert = int(config[window.upper() + ' SETTINGS']['vertical screen size'])
 
+smallAlignmentZone = tkinter.IntVar(value = (config[window.upper() + ' SETTINGS']['small alignment zone']))
+
 dragToSelectROI = False
 ROIBox = [[0,0],[0,0]]
 
@@ -443,7 +445,7 @@ labelText = StringVar()
 labelText.set("")
 labelDir = Label(mainTab, textvariable=labelText, font = ("arial",40))
 
-camNameText = StringVar(value = 'TEST') #cam_name.get()
+camNameText = StringVar(value = cam_name.get()) #cam_name.get()
 camNameDir = Label(bottom_frame, textvariable=camNameText, font = ("arial",10))
 
 fwhmxlabelText = StringVar(value = "")
@@ -1039,6 +1041,7 @@ def saveMotorfcn():
     config[window.upper() + ' SETTINGS']['motor y number'] = str(motorYnum.get())
     config[window.upper() + ' SETTINGS']['motor x multiplier'] = str(motorXmult.get())
     config[window.upper() + ' SETTINGS']['motor y multiplier'] = str(motorYmult.get())
+    [window.upper() + ' SETTINGS']['small alignment zone'] = str(smallAlignmentZone.get())
     with open(iniFname, 'w') as configfile:
         config.write(configfile)
 
@@ -1102,6 +1105,12 @@ def popup_motor(tab):
     jogMinusXButton = ttk.Button(win, text="X-", command=jogMinusXfcn, width=5)
     jogPlusYButton = ttk.Button(win, text="Y+", command=jogPlusYfcn, width=5)
     jogMinusYButton = ttk.Button(win, text="Y-", command=jogMinusYfcn, width=5)
+
+    smallAlignmentZoneDir = Label(win, textvariable=StringVar(value='small alignment zone:'))
+    smallAlignmentZoneEntry = ttk.Entry(win, textvariable=smallAlignmentZone, width=5)
+    smallAlignmentZoneDir.place(x = 0, y = 125)
+    smallAlignmentZoneEntry.place(x = 125, y = 125)
+
 
     motorOnButton.place(x=0, y=0)
     motorDir.place(x=0, y=25)
@@ -1439,6 +1448,17 @@ def stabilizeBeam():
             xsign = int(math.copysign(1, xdiff))
             ydiff = ypos-ytarget
             ysign = int(math.copysign(1, ydiff))
+
+            if math.sqrt(xdiff**2 + ydiff**2) <= motorError.get()*2:
+                horizontal_line.set_color("green")
+                vertical_line.set_color("green")
+            elif math.sqrt(xdiff**2 + ydiff**2) <= smallMisallignment:
+                horizontal_line.set_color("yellow")
+                vertical_line.set_color("yellow")
+            else:
+                horizontal_line.set_color("red")
+                vertical_line.set_color("red")
+
             for i, mtr in enumerate([motorXnum.get(), motorYnum.get()]):
                 if i==0:
                     if abs(xdiff) > motorError.get():
