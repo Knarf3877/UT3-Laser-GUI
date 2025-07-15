@@ -429,6 +429,7 @@ ROITab = ttk.Frame(tabControl)
 camerasTab = ttk.Frame(tabControl)
 plotAdjTab = ttk.Frame(tabControl)
 motorsTab = ttk.Frame(tabControl)
+colorsTab = ttk.Frame(tabControl)
 
 tabControl.add(mainTab, text='Main Image')
 tabControl.add(energyTab, text='Energy/fl')
@@ -437,6 +438,7 @@ tabControl.add(ROITab, text='ROI')
 tabControl.add(camerasTab, text='Cameras')
 tabControl.add(plotAdjTab, text='Plot Adj')
 tabControl.add(motorsTab, text='Motors')
+tabControl.add(colorsTab, text='Palette')
 tabControl.pack(expand=1, fill="both")
 
 #################################### main tab #######################################
@@ -1147,6 +1149,80 @@ else:
     nullMotorText = Label(motorsTab, textvariable="No motors set in settings")
     nullMotorText.place(pady = 5)
 
+################################################################ color functions #######################################################################
+
+energyPlotColor = StringVar(value = config[window.upper() + ' SETTINGS']['energy plot color'])
+energyPlotLineColor = StringVar(value = config[window.upper() + ' SETTINGS']['energy plot line color'])
+ROIColor = StringVar(value = config[window.upper() + ' SETTINGS']['ROI color'])
+fixedLineColor = StringVar(value = config[window.upper() + ' SETTINGS']['fixed line color'])
+xSliceColor = StringVar(value = config[window.upper() + ' SETTINGS']['x slice color'])
+ySliceColor = StringVar(value = config[window.upper() + ' SETTINGS']['y slice color'])
+    
+def applyColorScheme():
+    print("palette applied")
+    return
+#    im.axes.add_patch(rect)
+#     x_slice_raw.set_data([0], [0])
+#     y_slice_raw.set_data([0],[0])
+#     x_slice.set_data([0], [0])
+#     y_slice.set_data([0],[0])
+#     energy_plot.set_data([0],[0])
+#     energy_plot_line.set_data([0],[0])
+#     energy_plot_line_long.set_data([0],[0])
+#     horizontal_line.set_color('white')
+#     vertical_line.set_color('white')
+#     horizontal_line_fixed.set_color('white')
+#     vertical_line_fixed.set_color('white')
+#     maxLine.set_color('white')
+#     midLine.set_color('white')
+#     botLine.set_color('white')
+#     maxText.set_text("")
+#     midText.set_text("")
+#     botText.set_text("")
+#     maxTextLong.set_text("")
+#     midTextLong.set_text("")
+#     botTextLong.set_text("")
+#     ROILeftLine.set_color('white')
+#     ROIRightLine.set_color('white')
+#     ROIBottomLine.set_color('white')
+#     ROITopLine.set_color('white')
+#     circ.set_color('white')
+def saveColorSceme():
+    print("palette saved")
+    config.read(iniFname)
+    config[window.upper() + ' SETTINGS']['energy plot color'] = str(energyPlotColor.get())
+    config[window.upper() + ' SETTINGS']['energy plot line color'] = str(energyPlotLineColor.get())
+    config[window.upper() + ' SETTINGS']['ROI color'] = str(ROIColor.get())
+    config[window.upper() + ' SETTINGS']['fixed line color'] = str(fixedLineColor.get())
+    config[window.upper() + ' SETTINGS']['x slice color'] = str(xSliceColor.get())
+    config[window.upper() + ' SETTINGS']['y slice color'] = str(ySliceColor.get())
+    with open(iniFname, 'w') as configfile:
+        config.write(configfile)
+    return
+
+def popup_color(tab):
+    openBox.set(True)
+    win = tab
+    applyPaletteButton = ttk.Button(win, text="Apply Palette", command=applyColorScheme, width=5)
+    savePaletteButton = ttk.Button(win, text="Save Palette", command=saveColorSceme, width=5)
+    
+    energyPlotText = StringVar(value="energy plot color:")
+    energyPlotDir = Label(win, textvariable=energyPlotText)
+    energyPlotEntry = ttk.Entry(win, textvariable=energyPlotColor, width=5)
+    
+    energyPlotLineText = StringVar(value="energy line color:")
+    energyPlotLineDir = Label(win, textvariable=energyPlotLineText)
+    energyPlotLineEntry = ttk.Entry(win, textvariable=energyPlotLineColor, width=5)
+    
+    applyPaletteButton.place(x=0, y=100)
+    savePaletteButton.place(x=50, y=100)
+    
+    energyPlotDir.place(x=0, y=0)
+    energyPlotEntry.place(x=100, y=0)
+    energyPlotLineDir.place(x=0, y=25)
+    energyPlotLineEntry.place(x=100, y=25)
+    
+popup_color(colorsTab)
 ################################################################ funcAnimation functions #######################################################################
 
 def grabCamera():
@@ -1189,10 +1265,10 @@ def grabCamera():
         stddev = 0
     energyText.set("%.1f"%(energy))
     if energy <energyLimit.get():
-        energylabelDir.config(fg= 'red')
+        energylabelDir.config(fg = 'red')
         energyDir.config(fg = 'red')
     else:
-        energylabelDir.config(fg= 'black')
+        energylabelDir.config(fg = 'black')
         energyDir.config(fg = 'black')
         
     if energy>motorThreshold.get():
@@ -1430,7 +1506,7 @@ def plotImg(img):
             im.set_clim(vmin=np.min(img2), vmax=np.max(img2))
     else:
         im.set_clim(vmin=np.min(img2), vmax=np.max(img2))
-        
+
 def stabilizeBeam():
     if initializeOn.get():
         initializeOnfcn()
